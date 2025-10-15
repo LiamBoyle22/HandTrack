@@ -19,6 +19,17 @@ def main():
 
     pyautogui.FAILSAFE = True
 
+    print("Hand gesture control satarted")
+    print("Press 'q' to quit")
+    print("\nGesture Controls:")
+    print("- POINT (index finger up): Move cursor")
+    print("- Pinch (thumb and index finger together): Left click")
+    print("- SCROLL (peace sign): Scroll up/down")
+    print("- GRAB (fist): select text")
+    print("- L-SHAPE (L shape with thumb and index finger): Undo")
+    print("- PALM (open hand): Copy")
+    print("- THUMB UP (thumb up): Paste")
+
     while True:
         data, image = cap.read()
         if not data:
