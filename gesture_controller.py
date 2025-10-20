@@ -53,6 +53,9 @@ class GestureController:
         if fingers == [True, True, False, False, True]:
             return "L_SHAPE"
         
+        if fingers == [ True, True, True, True, True]:
+            return "Open Hand"
+        
         if all(fingers):
             return "PALM"
         
@@ -73,3 +76,7 @@ class GestureController:
         return int(avg_x), int(avg_y)
     
     def execute_action(self, gesture, landmarks, frame_width, frame_height):
+        current_time = time.time(0)
+        if gesture != self.prev_gesture:
+            self.gesture_start_time = current_time
+            self.prev_gesture = gesture
