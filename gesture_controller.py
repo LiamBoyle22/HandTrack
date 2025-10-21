@@ -60,8 +60,8 @@ class GestureController:
             return "PALM"
         
         return "UNKNOWN"
-    
-    def get_cursor_poition(self, landmarks, frame_width, frame_height):
+
+    def get_cursor_position(self, landmarks, frame_width, frame_height):
         index_finger_tip = landmarks[8]
         x = int(index_finger_tip.x * frame_width)
         y = int(index_finger_tip.y * frame_height)
@@ -80,3 +80,5 @@ class GestureController:
         if gesture != self.prev_gesture:
             self.gesture_start_time = current_time
             self.prev_gesture = gesture
+        if gesture != "UNKNOWN" and (current_time - self.gesture_start_time) < self.gesture_threshold:
+            return "Processing Gesture..."
