@@ -9,7 +9,7 @@ class GestctrlSys:
 
     def __init__(self):
         self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640))
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
         if not self.cap.isOpened():
@@ -67,7 +67,7 @@ class GestctrlSys:
                 elif key == ord('d'):
                     self.show_debug = not self.show_debug
 
-        except keyboardInterrupt:
+        except KeyboardInterrupt:
             print("Interrupted by user")
 
         except Exception as e:
