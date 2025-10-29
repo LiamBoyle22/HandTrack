@@ -82,16 +82,16 @@ class GestctrlSys:
         self.cap.release()
         cv2.destroyAllWindows()
 
-    def main():
-        
-        try: 
-            system = GestctrlSys()
-            system.run()
+def main():
+    
+    try: 
+        system = GestctrlSys()
+        system.run()
 
-        except Exception as e:
-            print(f"Failed to start Gesture Control System: {e}")
-            import traceback
-            traceback.print_exc()
+    except Exception as e:
+        print(f"Failed to start Gesture Control System: {e}")
+        import traceback
+        traceback.print_exc()
 
-    if __name__ == "__main__":
-        main()
+if __name__ == "__main__":
+    main()
