@@ -1,4 +1,4 @@
-from .smoothing import PositionSmoother, ExponentialMovingAverage, KalmanFilter1D
-from .calibration import HandCalibration
+from .smoothing import PositionalSmoother, VelocityLimiter
+from .calibration import HandCalibration, QuickCalibration
 
-__all__ = ['PositionSmoother', 'ExponentialMovingAverage', 'KalmanFilter1D', 'HandCalibration']
+__all__ = ['PositionalSmoother', 'VelocityLimiter', 'HandCalibration', 'QuickCalibration', 'ExponentialMovingAverage', 'KalmanFilter1D']
