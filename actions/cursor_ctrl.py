@@ -90,10 +90,10 @@ class CursorController:
         except Exception as e:
             print(f"Error dragging mouse to position: {e}")
 
-    def scroll(self, ammount):
+    def scroll(self, amount):
         
         try:
-            pyautogui.scroll(int(ammount))
+            pyautogui.scroll(int(amount))
         except Exception as e:
             print(f"Error scrolling mouse: {e}")
 
