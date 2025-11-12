@@ -1,23 +1,23 @@
 import cv2
 import mediapipe
-import numpy as np
+from mediapipe import solutions as mp_solutions
 import gesture_config as config
 
 class HandDetector:
     def __init__(self,
-                 max_num_hands = config.MAX_NUM_HANDS,
-                 detection_confidence = config.HAND_DETECTION_CONFIDENCE,
-                 tracking_confidence = config.HAND_TRACKING_CONFIDENCE):
+        max_num_hands = config.MAX_NUM_HANDS,
+        detection_confidence = config.HAND_DETECTION_CONFIDENCE,
+        tracking_confidence = config.HAND_TRACKING_CONFIDENCE):
 
         self.mp_hands = mediapipe.solutions.hands
         self.mp_drawing = mediapipe.solutions.drawing_utils
         self.mp_drawing_styles = mediapipe.solutions.drawing_styles
 
         self.hands = self.mp_hands.Hands(static_image_mode=False,
-                                          max_num_hands=max_num_hands,
-                                          min_detection_confidence=detection_confidence,
-                                          min_tracking_confidence=tracking_confidence)
-        
+            max_num_hands=max_num_hands,
+            min_detection_confidence=detection_confidence,
+            min_tracking_confidence=tracking_confidence)
+            
         self.max_num_hands = max_num_hands
         self.detection_confidence = detection_confidence
         self.tracking_confidence = tracking_confidence

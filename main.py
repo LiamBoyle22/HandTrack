@@ -1,97 +1,122 @@
+from __future__ import annotations
 import cv2
 import time
-import numpy as np
+from typing import Optional, Tuple
 
-#To-Do
-    #Import modules from other files
+from action_mapper import ActionMapper
+from hand_detect import HandDetector
+from gesture_class import GestureClassifier
+import gesture_config as config
 
-class GestctrlSys:
+def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float = 0.7) -> Tuple[int, int]:
+    if prev is None:
+        return curr
+    return (
+        int(alpha * prev[0] + (1 - alpha) * curr[0]),
+        int(alpha * prev[1] + (1 - alpha) * curr[1]),
+    )
 
+class App:
     def __init__(self):
+        self.detector = HandDetector(
+            max_num_hands = config.MAX_NUM_HANDS,
+            detection_confidence = config.HAND_DETECTION_CONFIDENCE,
+            tracking_confidence = config.HAND_TRACKING_CONFIDENCE,
+        )
+        self.classifier = GestureClassifier()
+        self.actions = ActionMapper()
+
         self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
 
+        self.prev_screen_xy: Optional[Tuple[int, int]] = None
+        self.drag_active = False
+
+    def move_pointer(self, landmarks):
+        index_xy = self.classifier.get_pointer_position(landmarks)
+        if index_xy is None:
+            return
+        
+        screen_xy = self.actions.cursor.map_cordinates(
+            index_xy[0],
+            index_xy[1],
+            config.FRAME_WIDTH,
+            config.FRAME_HEIGHT,
+        )
+
+        screen_xy = smooth(self.prev_screen_xy, screen_xy, alpha=(1 - config.SMOOTHING_FACTOR))
+        self.prev_screen-xy = screen_xy
+
+        self.actions.ping_action("move_to", screen_xy[0], screen_xy[1], duration = 0.0)
+
+    def handle_gesture_actions(self, gesture: str):
+        if gesture == GestureClassifier.GESTURE_PINCH:
+            if not self.drag_active:
+                self.actions.ping_action("mouse_down", button = "left")
+                self.drag_active = True
+
+        else:
+            if self.drag_active:
+                self.actions.ping_action("mouse_up", button = "left")
+                self.drag_active = False
+
+        if gesture == GestureClassifier.GESTURE_FIST:
+            self.actions.ping_action("left_click")
+        elif gesture == GestureClassifier.GESTURE_PEACE:
+            self.actions.ping_action("double_click")
+        elif gesture == GestureClassifier.GESTURE_THREE_FINGERS:
+            self.actions.ping_action("right_click")
+        elif gesture == GestureClassifier.GESTURE_FOUR_FINGERS:
+            self.actions.ping_action("scroll_down", amount = config.SCROLL_AMOUNT)
+        elif gesture == GestureClassifier.GESTURE_THUMBS_UP:
+            self.actions.ping_action("select_all")
+
+    def run (self):
         if not self.cap.isOpened():
-            raise Exception("Could not open video device, is it connected?")
-        
-        #1920 by 1080 for cursor mapping
-        self.screen_width = 1920
-        self.screen_height = 1080
-
-        #FPS tracking
-        self.prev_time = 0
-        self.curr_time = 0
-
-        #shows FPS and debug info
-        self.is_running = True
-        self.show_debug = True
-        
-        #To-Do: initialize other modules here
-        
-    def calculate_fps(self):
-        self.curr_time = time.time()
-        fps = 1/(self.curr_time - self.prev_time)
-        self.prev_time = self.curr_time
-        return (fps)
-    
-    def process_frame(self, frame):
-        #To-Do: Add gesture recognition and cursor control logic here
-        return frame
-    
-    def draw_debug_info(self, frame, fps):
-        if self.show_debug:
-            cv2.putText(frame, f'FPS: {int(fps)}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-            cv2.putText(frame, "Press q to quit", (10, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-    
-    def run(self):
+            raise RuntimeError("Cannot open camera")
         try:
-            while self.is_running:
-                sucess, frame = self.cap.read()
-
-                if not sucess:
-                    print("Failed to grab frame")
+            while True:
+                ok, frame = self.cap.read()
+                if not ok:
+                    print("Cannot read frame from camera")
                     break
-
+                    
                 frame = cv2.flip(frame, 1)
-                fps = self.calculate_fps()
-                pframe = self.process_frame(frame)
-                self.draw_debug_info(pframe, fps)
-                cv2.imshow("Gesture Control System", pframe)
-                key = cv2.waitKey(1) & 0xFF
-                
-                if key == ord('q'):
-                    self.is_running = False
 
-                elif key == ord('d'):
-                    self.show_debug = not self.show_debug
+                results = self.detector.detect_hands(frame)
+                hand_landmarks = self.detector.get_hand_landmarks(results, frame.shape)
 
-        except KeyboardInterrupt:
-            print("Interrupted by user")
+                frame = self.detector.draw_landmarks(frame, results)
 
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            import traceback
-            traceback.print_exc()
-        
+                if hand_landmarks:
+                    landmarks = hand_landmarks[0]
+
+                    self.move_pointer(landmarks)
+
+                    gesture = self.classifier.classify_gesture(landmarks)
+                    self.handle_gesture_actions(gesture)
+
+                    cv2.putText(
+                        frame,
+                        f"Gesture: {gesture}",
+                        (10,30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0,255,0),
+                        2,
+                    )
+
+                cv2.imshow("Hand Gesture Control", frame)
+
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break 
+
+                time.sleep(0.001)
         finally:
-            self.cleanup()
-
-    def cleanup(self):
-        self.cap.release()
-        cv2.destroyAllWindows()
-
-def main():
-    
-    try: 
-        system = GestctrlSys()
-        system.run()
-
-    except Exception as e:
-        print(f"Failed to start Gesture Control System: {e}")
-        import traceback
-        traceback.print_exc()
+            self.cap.release()
+            cv2.destroyAllWindows()
+            self.detector.cleanup()
 
 if __name__ == "__main__":
-    main()
+    App().run() 
