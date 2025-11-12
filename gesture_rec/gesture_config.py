@@ -1,4 +1,5 @@
-#config file for gesture module
+    #config file for gesture module
+ 
 HAND_DETECTION_CONFIDENCE = 0.7
 HAND_TRACKING_CONFIDENCE = 0.5
 MAX_NUM_HANDS = 1
@@ -7,6 +8,10 @@ MAX_NUM_HANDS = 1
 FINGER_TIP_THRESHOLD = 0.02
 PINCH_THRESHOLD = 0.05
 FIRST_THRESHOLD = 0.15
+
+#Scrolling
+SCROLLING_SENSITIVITY = 2.0
+SCROLL_AMOUNT = 40  #pixels per scroll action
 
 #cooldown time in frames
 GESTURE_COOLDOWN_FRAMES = 10

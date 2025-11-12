@@ -3,10 +3,10 @@ import cv2
 import time
 from typing import Optional, Tuple
 
-from action_mapper import ActionMapper
-from hand_detect import HandDetector
-from gesture_class import GestureClassifier
-import gesture_config as config
+from actions.action_mapper import ActionMapper
+from gesture_rec.hand_detect import HandDetector
+from gesture_rec.gesture_class import GestureClassifier
+from gesture_rec import gesture_config as config
 
 def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float = 0.7) -> Tuple[int, int]:
     if prev is None:
@@ -38,7 +38,7 @@ class App:
         if index_xy is None:
             return
         
-        screen_xy = self.actions.cursor.map_cordinates(
+        screen_xy = self.actions.cursor.map_coordinates(
             index_xy[0],
             index_xy[1],
             config.FRAME_WIDTH,
@@ -46,7 +46,7 @@ class App:
         )
 
         screen_xy = smooth(self.prev_screen_xy, screen_xy, alpha=(1 - config.SMOOTHING_FACTOR))
-        self.prev_screen-xy = screen_xy
+        self.prev_screen_xy = screen_xy
 
         self.actions.ping_action("move_to", screen_xy[0], screen_xy[1], duration = 0.0)
 
@@ -68,7 +68,9 @@ class App:
         elif gesture == GestureClassifier.GESTURE_THREE_FINGERS:
             self.actions.ping_action("right_click")
         elif gesture == GestureClassifier.GESTURE_FOUR_FINGERS:
-            self.actions.ping_action("scroll_down", amount = config.SCROLL_AMOUNT)
+            self.actions.ping_action("scroll_down", config.SCROLL_AMOUNT)
+        elif gesture == GestureClassifier.GESTURE_FIVE_FINGERS:
+            self.actions.ping_action("scroll_up", config.SCROLL_AMOUNT)
         elif gesture == GestureClassifier.GESTURE_THUMBS_UP:
             self.actions.ping_action("select_all")
 
@@ -85,7 +87,7 @@ class App:
                 frame = cv2.flip(frame, 1)
 
                 results = self.detector.detect_hands(frame)
-                hand_landmarks = self.detector.get_hand_landmarks(results, frame.shape)
+                hand_landmarks = self.detector.get_landmarks(results, frame.shape)
 
                 frame = self.detector.draw_landmarks(frame, results)
 
@@ -96,6 +98,7 @@ class App:
 
                     gesture = self.classifier.classify_gesture(landmarks)
                     self.handle_gesture_actions(gesture)
+
 
                     cv2.putText(
                         frame,

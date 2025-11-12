@@ -1,8 +1,8 @@
 #mapping configurations for actions
 import pyautogui
 from typing import Any, Callable, Dict
-from cursor_ctrl import CursorController
-from keyboard_ctr import KeyBoardController
+from actions.cursor_ctrl import CursorController
+from actions.keyboard_ctr import KeyBoardController
 
 class ActionMapper:
     def __init__(self, cursor: CursorController | None = None,
@@ -32,7 +32,6 @@ class ActionMapper:
                   "type_text": self.keyboard.type_text,
                   "copy": self.keyboard.copy,
                   "paste": self.keyboard.paste,
-                  "cut": self.keyboard.cut,
                   "cut": self.keyboard.cut,
                   "undo": self.keyboard.undo,
                   "redo": self.keyboard.redo,
