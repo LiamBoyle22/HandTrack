@@ -7,6 +7,17 @@ from actions.action_mapper import ActionMapper
 from gesture_rec.hand_detect import HandDetector
 from gesture_rec.gesture_class import GestureClassifier
 from gesture_rec import gesture_config as config
+from utils.state_machine import GestureStateMachine, ControlState
+
+def normalize_for_state(gesture: str) -> str:
+    if gesture == GestureClassifier.GESTURE_FIST:
+        return "FIST"
+    if gesture == GestureClassifier.GESTURE_FIVE_FINGERS:
+        return "FIVE"
+    return "OTHER"
+
+
+state_machine = GestureStateMachine(hold_seconds=3.0, drop_grace = 0.6)
 
 def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float = 0.7) -> Tuple[int, int]:
     if prev is None:
@@ -18,6 +29,8 @@ def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float 
 
 class App:
     def __init__(self):
+        self.fist_streak = 0
+        self.last_sent_label = "other"
         self.detector = HandDetector(
             max_num_hands = config.MAX_NUM_HANDS,
             detection_confidence = config.HAND_DETECTION_CONFIDENCE,
@@ -48,21 +61,21 @@ class App:
         screen_xy = smooth(self.prev_screen_xy, screen_xy, alpha=(1 - config.SMOOTHING_FACTOR))
         self.prev_screen_xy = screen_xy
 
-        self.actions.ping_action("move_to", screen_xy[0], screen_xy[1], duration = 0.0)
+        self.actions.ping_action("move_to", screen_xy[0], screen_xy[1], duration=0.0)
 
-    def handle_gesture_actions(self, gesture: str):
+    def handle_gesture_actions(self, gesture: str, state: ControlState):
         if gesture == GestureClassifier.GESTURE_PINCH:
             if not self.drag_active:
-                self.actions.ping_action("mouse_down", button = "left")
+                self.actions.ping_action("mouse_down", button="left")
                 self.drag_active = True
-
         else:
             if self.drag_active:
-                self.actions.ping_action("mouse_up", button = "left")
+                self.actions.ping_action("mouse_up", button="left")
                 self.drag_active = False
 
         if gesture == GestureClassifier.GESTURE_FIST:
-            pass #FOR NOW BECAUSE MOVE POINTER HANDLES IT 
+            # No-op; fist is used to arm/disarm via the state machine.
+            pass
         elif gesture == GestureClassifier.GESTURE_PEACE:
             self.actions.ping_action("left_click")
         elif gesture == GestureClassifier.GESTURE_THREE_FINGERS:
@@ -70,11 +83,12 @@ class App:
         elif gesture == GestureClassifier.GESTURE_FOUR_FINGERS:
             self.actions.ping_action("scroll_down", config.SCROLL_AMOUNT)
         elif gesture == GestureClassifier.GESTURE_FIVE_FINGERS:
-            self.actions.ping_action("scroll_up", config.SCROLL_AMOUNT)
+            if state != ControlState.ACTIVE:
+                self.actions.ping_action("scroll_up", config.SCROLL_AMOUNT)
         elif gesture == GestureClassifier.GESTURE_THUMBS_UP:
             self.actions.ping_action("select_all")
 
-    def run (self):
+    def run(self):
         if not self.cap.isOpened():
             raise RuntimeError("Cannot open camera")
         try:
@@ -83,7 +97,7 @@ class App:
                 if not ok:
                     print("Cannot read frame from camera")
                     break
-                    
+
                 frame = cv2.flip(frame, 1)
 
                 results = self.detector.detect_hands(frame)
@@ -96,26 +110,47 @@ class App:
 
                     gesture = self.classifier.classify_gesture(landmarks)
 
-                    if gesture == GestureClassifier.GESTURE_FIST:
+                    norm = normalize_for_state(gesture)
+
+                    if norm == "FIST":
+                        self.fist_streak += 1
+                    else:
+                        self.fist_streak = 0
+
+                    stable_norm = "FIST" if self.fist_streak >=  5 else ("FIVE" if norm == "FIVE" else "OTHER")
+                    state = state_machine.update(stable_norm)
+
+                    # --- State machine gating: hold FIST ~3s to arm, then move with FIVE ---
+                    state = state_machine.update(normalize_for_state(gesture))
+                    if state == ControlState.ACTIVE and gesture == GestureClassifier.GESTURE_FIVE_FINGERS:
                         self.move_pointer(landmarks)
 
-                    self.handle_gesture_actions(gesture)
+                    self.handle_gesture_actions(gesture, state)
 
-
+                    # HUD: gesture/state
                     cv2.putText(
                         frame,
                         f"Gesture: {gesture}",
-                        (10,30),
+                        (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         1,
-                        (0,255,0),
+                        (0, 255, 0),
+                        2,
+                    )
+                    cv2.putText(
+                        frame,
+                        f"State: {state.name}",
+                        (10, 70),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8,
+                        (0, 255, 255),
                         2,
                     )
 
                 cv2.imshow("Hand Gesture Control", frame)
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break 
+                    break
 
                 time.sleep(0.001)
         finally:
@@ -124,4 +159,4 @@ class App:
             self.detector.cleanup()
 
 if __name__ == "__main__":
-    App().run() 
+    App().run()

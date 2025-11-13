@@ -2,7 +2,7 @@ import numpy as np
 
 class PositionalSmoother:
     
-    def __init__(self, smoothing = 0.5)
+    def __init__(self, smoothing = 0.5):
         self.smoothing = smoothing
         self.smoothed_x = None
         self.smoothed_y = None
