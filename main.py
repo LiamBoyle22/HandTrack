@@ -62,9 +62,9 @@ class App:
                 self.drag_active = False
 
         if gesture == GestureClassifier.GESTURE_FIST:
-            self.actions.ping_action("left_click")
+            pass #FOR NOW BECAUSE MOVE POINTER HANDLES IT 
         elif gesture == GestureClassifier.GESTURE_PEACE:
-            self.actions.ping_action("double_click")
+            self.actions.ping_action("left_click")
         elif gesture == GestureClassifier.GESTURE_THREE_FINGERS:
             self.actions.ping_action("right_click")
         elif gesture == GestureClassifier.GESTURE_FOUR_FINGERS:
@@ -94,9 +94,11 @@ class App:
                 if hand_landmarks:
                     landmarks = hand_landmarks[0]
 
-                    self.move_pointer(landmarks)
-
                     gesture = self.classifier.classify_gesture(landmarks)
+
+                    if gesture == GestureClassifier.GESTURE_FIST:
+                        self.move_pointer(landmarks)
+
                     self.handle_gesture_actions(gesture)
 
 
