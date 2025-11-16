@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from . import gesture_config as config
+from typing import Sequence
 
 class GestureClassifier:
 
@@ -22,6 +23,57 @@ class GestureClassifier:
 
         self.cooldown_frames = config.GESTURE_COOLDOWN_FRAMES
         self.last_gesture_frame = self.cooldown_frames
+
+    POKE_Z_DELTA = getattr(config, "POKE_Z_DELTA", 0.08) #depth from wrist to finger tip to count as poke
+    POKE_REQUIRE_EXTENDED = getattr(config, "POKE_REQUIRE_EXTENDED", True)
+
+    def _z(self, pt):
+        #Fall back to 0.0 if missing.
+        return pt.get("z", 0.0)
+
+    def _tips_for(self, landmarks, finger_names: Sequence[str]):
+        m = {
+            "thumb":  config.HandLandmark.THUMB_TIP,
+            "index":  config.HandLandmark.INDEX_FINGER_TIP,
+            "middle": config.HandLandmark.MIDDLE_FINGER_TIP,
+            "ring":   config.HandLandmark.RING_FINGER_TIP,
+            "pinky":  config.HandLandmark.PINKY_TIP,
+        }
+        return [landmarks[m[name]] for name in finger_names]
+
+    def _all_extended(self, landmarks, finger_names: Sequence[str]) -> bool:
+        fi = self.count_extended_fingers(landmarks)
+        want = {
+            "thumb": fi["thumb"],
+            "index": fi["index"],
+            "middle": fi["middle"],
+            "ring": fi["ring"],
+            "pinky": fi["pinky"],
+        }
+        return all(want[name] for name in finger_names)
+
+    def _is_poke(self, landmarks, finger_names: Sequence[str]) -> bool:
+
+        if not landmarks or len(landmarks) != 21:
+            return False
+
+        if self.POKE_REQUIRE_EXTENDED and not self._all_extended(landmarks, finger_names):
+            return False
+
+        wrist_z = self._z(landmarks[config.HandLandmark.WRIST])
+        tips = self._tips_for(landmarks, finger_names)
+
+        #Trigger when all selected tips are closer than wrist by a delta.
+        return all((self._z(t) - wrist_z) < (-self.POKE_Z_DELTA) for t in tips)
+
+    def detect_poke_index(self, landmarks) -> bool:
+        return self._is_poke(landmarks, ["index"])
+
+    def detect_poke_two_fingers(self, landmarks) -> bool:
+        return self._is_poke(landmarks, ["index", "middle"])
+
+    def detect_poke_three_fingers(self, landmarks) -> bool:
+        return self._is_poke(landmarks, ["index", "middle", "ring"])
 
     def calc_distance(self, point1, point2):
         dx = point1['x'] - point2['x']

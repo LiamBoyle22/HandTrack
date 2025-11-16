@@ -41,6 +41,16 @@ class KeyBoardController:
         except Exception as e:
             print(f"Error pressing hotkey {keys}: {e}")
 
+    def type_text(self, text):
+        if not self.check_cooldown():
+            return
+        
+        try:
+            pyautogui.typewrite(text)
+            print(f"Typed text: {text}")
+        except Exception as e:
+            print(f"Error typing text {text}: {e}")
+
     def copy(self):
         self.hotkey(self.modifier, 'c')
 

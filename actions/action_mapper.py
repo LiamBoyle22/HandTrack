@@ -11,7 +11,7 @@ class ActionMapper:
             self.keyboard = keyboard or KeyBoardController()
 
             self.cursor_action_map: Dict[str, Callable[..., Any]] = {
-                "move_to": self.cursor.move_to,
+                "move_to": self.cursor.move_to, #main cursor movement action
                 "move_relative": self.cursor.move_relative,
                 "get_position": self.cursor.get_position,
                 "click": self.cursor.click,
