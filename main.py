@@ -3,6 +3,7 @@ import cv2
 import time
 from time import monotonic
 from typing import Optional, Tuple
+import math
 
 from actions.action_mapper import ActionMapper
 from gesture_rec.hand_detect import HandDetector
@@ -14,7 +15,6 @@ from utils.state_machine import GestureStateMachine, ControlState
 state_machine = GestureStateMachine(hold_seconds=3.0, drop_grace=0.6)
 
 def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float) -> Tuple[int, int]:
-    """EMA smoothing. alpha in [0..1], where 0 keeps 'curr' fully, 1 keeps 'prev' fully."""
     if prev is None:
         return curr
     return (
@@ -23,12 +23,48 @@ def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float)
     )
 
 def _normalize_for_state(gesture: str) -> str:
-    """Map classifier constants to 'fist'/'five'/'other' for the state machine."""
     if gesture == GestureClassifier.GESTURE_FIST:
         return "fist"
     if gesture == GestureClassifier.GESTURE_FIVE_FINGERS:
         return "five"
     return "other"
+
+#One Euro filter (smooth when slow, responsive when fast) IN TESTING
+class OneEuroFilter:
+    def __init__(self, freq=60.0, min_cutoff=1.5, beta=0.35, d_cutoff=20.0):
+        self.freq = freq #expected samples/sec
+        self.min_cutoff = min_cutoff
+        self.beta = beta #velocity sensitivity
+        self.d_cutoff = d_cutoff
+        self.last_time = None
+        self.prev_x = None
+        self.prev_dx = None
+
+    def _alpha(self, cutoff):
+        tau = 1.0 / (2*math.pi*cutoff)
+        te = 1.0 / max(1e-3, self.freq)
+        return 1.0 / (1.0 + tau/te)
+
+    def filter(self, x):
+        #Estimate dx
+        if self.prev_x is None:
+            dx = 0.0
+        else:
+            dx = (x - self.prev_x) * self.freq
+
+        #Smooth dx
+        a_d = self._alpha(self.d_cutoff)
+        dx_hat = dx if self.prev_dx is None else (a_d*dx + (1-a_d)*self.prev_dx)
+
+        #Dynamic cutoff based on velocity
+        cutoff = self.min_cutoff + self.beta * abs(dx_hat)
+        a = self._alpha(cutoff)
+
+        # Smooth x
+        x_hat = x if self.prev_x is None else (a*x + (1-a)*self.prev_x)
+        self.prev_x = x_hat
+        self.prev_dx = dx_hat
+        return x_hat
 
 class App:
     def __init__(self):
@@ -77,7 +113,6 @@ class App:
         return False
 
     def move_pointer(self, landmarks):
-        """Map index fingertip to screen coords and move cursor."""
         index_xy = self.classifier.get_pointer_position(landmarks)
         if index_xy is None:
             return
@@ -98,7 +133,6 @@ class App:
         self.actions.ping_action("move_to", screen_xy[0], screen_xy[1], duration=0.0)
 
     def _handle_pinch_minimize(self, landmarks, state: ControlState):
-        """One-shot: pinch => minimize active window (ACTIVE only)."""
         if state != ControlState.ACTIVE:
             self._pinch_active = False
             return
@@ -113,7 +147,6 @@ class App:
             self._pinch_active = False
 
     def _handle_pokes(self, landmarks, state: ControlState):
-        """Depth-based poke gestures (ACTIVE only)."""
         if state != ControlState.ACTIVE:
             return
 
