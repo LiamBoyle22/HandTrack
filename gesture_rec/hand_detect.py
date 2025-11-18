@@ -56,8 +56,8 @@ class HandDetector:
         hand_info = []
         for i in range(len(results.multi_handedness)):
             hand = results.multi_handedness[i]
-            handedness = hand.classification[0].label  # Use 'hand', not 'hand_info'
-            score = hand.classification[0].score        # Use 'hand', not 'hand_info'
+            handedness = hand.classification[0].label
+            score = hand.classification[0].score        
 
             hand_info.append({
                 'handedness': handedness,

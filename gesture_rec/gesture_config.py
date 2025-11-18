@@ -1,4 +1,4 @@
-    #config file for gesture module
+#config file for gesture module
  
 HAND_DETECTION_CONFIDENCE = 0.7
 HAND_TRACKING_CONFIDENCE = 0.5
