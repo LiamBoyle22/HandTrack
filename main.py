@@ -22,7 +22,7 @@ def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float)
         int(alpha * prev[1] + (1 - alpha) * curr[1]),
     )
 
-def _normalize_for_state(gesture: str) -> str:
+def normalize_for_state(gesture: str) -> str:
     if gesture == GestureClassifier.GESTURE_FIST:
         return "fist"
     if gesture == GestureClassifier.GESTURE_FIVE_FINGERS:
@@ -40,7 +40,7 @@ class OneEuroFilter:
         self.prev_x = None
         self.prev_dx = None
 
-    def _alpha(self, cutoff):
+    def alpha(self, cutoff):
         tau = 1.0 / (2*math.pi*cutoff)
         te = 1.0 / max(1e-3, self.freq)
         return 1.0 / (1.0 + tau/te)
@@ -53,12 +53,12 @@ class OneEuroFilter:
             dx = (x - self.prev_x) * self.freq
 
         #Smooth dx
-        a_d = self._alpha(self.d_cutoff)
+        a_d = self.alpha(self.d_cutoff)
         dx_hat = dx if self.prev_dx is None else (a_d*dx + (1-a_d)*self.prev_dx)
 
         #Dynamic cutoff based on velocity
         cutoff = self.min_cutoff + self.beta * abs(dx_hat)
-        a = self._alpha(cutoff)
+        a = self.alpha(cutoff)
 
         # Smooth x
         x_hat = x if self.prev_x is None else (a*x + (1-a)*self.prev_x)
@@ -66,7 +66,7 @@ class OneEuroFilter:
         self.prev_dx = dx_hat
         return x_hat
 
-class App:
+class HTApp:
     def __init__(self):
         #Hand detector + classifier
         self.detector = HandDetector(
@@ -105,7 +105,7 @@ class App:
         self._pinch_cooldown_s = 0.8
         self._pinch_active = False  #rising-edge detector
 
-    def _can_fire(self, key: str, min_interval: float) -> bool:
+    def can_fire(self, key: str, min_interval: float) -> bool:
         now = monotonic()
         if now - self._last_fire.get(key, 0.0) >= min_interval:
             self._last_fire[key] = now
@@ -132,7 +132,7 @@ class App:
         #Move cursor
         self.actions.ping_action("move_to", screen_xy[0], screen_xy[1], duration=0.0)
 
-    def _handle_pinch_minimize(self, landmarks, state: ControlState):
+    def handle_pinch_minimize(self, landmarks, state: ControlState):
         if state != ControlState.ACTIVE:
             self._pinch_active = False
             return
@@ -140,20 +140,20 @@ class App:
         is_pinch = (self.classifier.classify_gesture(landmarks) == self.classifier.GESTURE_PINCH)
         if is_pinch and not self._pinch_active:
             #rising edge
-            if self._can_fire("minimize", self._pinch_cooldown_s):
+            if self.can_fire("minimize", self._pinch_cooldown_s):
                 self.actions.ping_action("minimize_window")
             self._pinch_active = True
         elif not is_pinch:
             self._pinch_active = False
 
-    def _handle_pokes(self, landmarks, state: ControlState):
+    def handle_pokes(self, landmarks, state: ControlState):
         if state != ControlState.ACTIVE:
             return
 
         #Index poke = left click
         try:
             if self.classifier.detect_poke_index(landmarks):
-                if self._can_fire("left_click", self._poke_cooldown_s):
+                if self.can_fire("left_click", self._poke_cooldown_s):
                     self.actions.ping_action("left_click")
         except AttributeError:
             #Poke helpers not present yet, skip silently
@@ -162,7 +162,7 @@ class App:
         #Two-finger poke (index+middle) = right click
         try:
             if self.classifier.detect_poke_two_fingers(landmarks):
-                if self._can_fire("right_click", self._poke_cooldown_s):
+                if self.can_fire("right_click", self._poke_cooldown_s):
                     self.actions.ping_action("right_click")
         except AttributeError:
             pass
@@ -170,7 +170,7 @@ class App:
         #Three-finger poke (index+middle+ring) = backspace
         try:
             if self.classifier.detect_poke_three_fingers(landmarks):
-                if self._can_fire("backspace", self._poke_cooldown_s):
+                if self.can_fire("backspace", self._poke_cooldown_s):
                     self.actions.ping_action("backspace")
         except AttributeError:
             pass
@@ -202,7 +202,7 @@ class App:
 
                     #Classify gesture
                     gesture = self.classifier.classify_gesture(landmarks)
-                    norm = _normalize_for_state(gesture)
+                    norm = normalize_for_state(gesture)
 
                     #Short streak to make arming more robust
                     if norm == "fist":
@@ -220,20 +220,20 @@ class App:
                         self.move_pointer(landmarks)
 
                     #One-shot pinch = minimize
-                    self._handle_pinch_minimize(landmarks, state)
+                    self.handle_pinch_minimize(landmarks, state)
 
                     #Poke gestures = click/backspace
-                    self._handle_pokes(landmarks, state)
+                    self.handle_pokes(landmarks, state)
 
                     #Reverse progress bar when disarming (ACTIVE + hold FIST)
-                    _hold_secs = getattr(state_machine, "hold_seconds", 3.0)
+                    hold_secs = getattr(state_machine, "hold_seconds", 3.0)
                     if state == ControlState.ACTIVE:
                         if norm == "fist":
                             if not self._disarm_active:
                                 self._disarm_active = True
                                 self._disarm_t0 = time.time()
                             elapsed = time.time() - self._disarm_t0
-                            hud_progress = 1.0 - min(1.0, elapsed / _hold_secs)
+                            hud_progress = 1.0 - min(1.0, elapsed / hold_secs)
                             if hud_progress <= 0.0:
                                 self._disarm_active = False
                         else:
@@ -282,4 +282,4 @@ class App:
                 pass
 
 if __name__ == "__main__":
-    App().run()
+    HTApp().run()
