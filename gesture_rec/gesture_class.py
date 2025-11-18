@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from . import gesture_config as config
+import gesture_config as config
 from typing import Sequence
 
 class GestureClassifier:
@@ -27,8 +27,8 @@ class GestureClassifier:
     POKE_Z_DELTA = getattr(config, "POKE_Z_DELTA", 0.08) #depth from wrist to finger tip to count as poke
     POKE_REQUIRE_EXTENDED = getattr(config, "POKE_REQUIRE_EXTENDED", True)
 
-    def _z(self, pt):
-        #Fall back to 0.0 if missing.
+    def z(self, pt):
+        #Fall back to 0.0 if missing
         return pt.get("z", 0.0)
 
     def _tips_for(self, landmarks, finger_names: Sequence[str]):
@@ -40,45 +40,6 @@ class GestureClassifier:
             "pinky":  config.HandLandmark.PINKY_TIP,
         }
         return [landmarks[m[name]] for name in finger_names]
-
-    def _all_extended(self, landmarks, finger_names: Sequence[str]) -> bool:
-        fi = self.count_extended_fingers(landmarks)
-        want = {
-            "thumb": fi["thumb"],
-            "index": fi["index"],
-            "middle": fi["middle"],
-            "ring": fi["ring"],
-            "pinky": fi["pinky"],
-        }
-        return all(want[name] for name in finger_names)
-
-    def _is_poke(self, landmarks, finger_names: Sequence[str]) -> bool:
-
-        if not landmarks or len(landmarks) != 21:
-            return False
-
-        if self.POKE_REQUIRE_EXTENDED and not self._all_extended(landmarks, finger_names):
-            return False
-
-        wrist_z = self._z(landmarks[config.HandLandmark.WRIST])
-        tips = self._tips_for(landmarks, finger_names)
-
-        #Trigger when all selected tips are closer than wrist by a delta.
-        return all((self._z(t) - wrist_z) < (-self.POKE_Z_DELTA) for t in tips)
-
-    def detect_poke_index(self, landmarks) -> bool:
-        return self._is_poke(landmarks, ["index"])
-
-    def detect_poke_two_fingers(self, landmarks) -> bool:
-        return self._is_poke(landmarks, ["index", "middle"])
-
-    def detect_poke_three_fingers(self, landmarks) -> bool:
-        return self._is_poke(landmarks, ["index", "middle", "ring"])
-
-    def calc_distance(self, point1, point2):
-        dx = point1['x'] - point2['x']
-        dy = point1['y'] - point2['y']
-        return math.sqrt(dx * dx + dy * dy)
     
     def is_finger_extended(self, landmarks, finger_tip_idx, finger_pip_idx):
         tip = landmarks[finger_tip_idx]
@@ -100,7 +61,26 @@ class GestureClassifier:
 
         return tip_distance > ip_distance
     
-    def count_extended_fingers(self, landmarks):
+    def is_pinch(self, landmarks):
+        thumb_tip = landmarks[config.HandLandmark.THUMB_TIP]
+        index_tip = landmarks[config.HandLandmark.INDEX_FINGER_TIP]
+        
+        distance = self.calc_distance(thumb_tip, index_tip)
+
+        wrist = landmarks[config.HandLandmark.WRIST]
+        middle_mcp = landmarks[config.HandLandmark.MIDDLE_FINGER_MCP]
+        hand_size = self.calc_distance(wrist, middle_mcp)
+
+        normalized_distance = distance / hand_size if hand_size > 0 else distance
+        
+        return normalized_distance < config.PINCH_THRESHOLD
+    
+    def is_fist(self, landmarks):
+        finger_info = self.extended_fingers(landmarks)
+        
+        return finger_info['count'] == 0 or (finger_info['count'] == 1 and finger_info['thumb'])
+    
+    def extended_fingers(self, landmarks):
         thumb_extended = self.is_thumb_extended(landmarks)
         index_extended = self.is_finger_extended(landmarks, config.HandLandmark.INDEX_FINGER_TIP, config.HandLandmark.INDEX_FINGER_PIP)
         middle_extended = self.is_finger_extended(landmarks, config.HandLandmark.MIDDLE_FINGER_TIP, config.HandLandmark.MIDDLE_FINGER_PIP)
@@ -117,31 +97,50 @@ class GestureClassifier:
             'ring': ring_extended,
             'pinky': pinky_extended
         }
-    
-    def is_pinch(self, landmarks):
-        thumb_tip = landmarks[config.HandLandmark.THUMB_TIP]
-        index_tip = landmarks[config.HandLandmark.INDEX_FINGER_TIP]
-        
-        distance = self.calc_distance(thumb_tip, index_tip)
 
-        wrist = landmarks[config.HandLandmark.WRIST]
-        middle_mcp = landmarks[config.HandLandmark.MIDDLE_FINGER_MCP]
-        hand_size = self.calc_distance(wrist, middle_mcp)
+    def _all_extended(self, landmarks, finger_names: Sequence[str]) -> bool:
+        fi = self.extended_fingers(landmarks)
+        want = {
+            "thumb": fi["thumb"],
+            "index": fi["index"],
+            "middle": fi["middle"],
+            "ring": fi["ring"],
+            "pinky": fi["pinky"],
+        }
+        return all(want[name] for name in finger_names)
 
-        normalized_distance = distance / hand_size if hand_size > 0 else distance
-        
-        return normalized_distance < config.PINCH_THRESHOLD
-    
-    def is_fist(self, landmarks):
-        finger_info = self.count_extended_fingers(landmarks)
-        
-        return finger_info['count'] == 0 or (finger_info['count'] == 1 and finger_info['thumb'])
+    def _is_poke(self, landmarks, finger_names: Sequence[str]) -> bool:
+
+        if not landmarks or len(landmarks) != 21:
+            return False
+
+        if self.POKE_REQUIRE_EXTENDED and not self._all_extended(landmarks, finger_names):
+            return False
+
+        wrist_z = self.z(landmarks[config.HandLandmark.WRIST])
+        tips = self._tips_for(landmarks, finger_names)
+
+        #Trigger when all selected tips are closer than wrist by a delta.
+        return all((self.z(t) - wrist_z) < (-self.POKE_Z_DELTA) for t in tips)
+    def poke_index(self, landmarks) -> bool:
+        return self._is_poke(landmarks, ["index"])
+
+    def poke_two_fingers(self, landmarks) -> bool:
+        return self._is_poke(landmarks, ["index", "middle"])
+
+    def poke_three_fingers(self, landmarks) -> bool:
+        return self._is_poke(landmarks, ["index", "middle", "ring"])
+
+    def calc_distance(self, point1, point2): #short for calculate, im just using slang
+        dx = point1['x'] - point2['x']
+        dy = point1['y'] - point2['y']
+        return math.sqrt(dx * dx + dy * dy)
     
     def classify_gesture(self, landmarks):
         if not landmarks or len(landmarks) != 21:
             return self.GESTURE_NONE
         
-        finger_info = self.count_extended_fingers(landmarks)
+        finger_info = self.extended_fingers(landmarks)
 
         if self.is_pinch(landmarks):
             return self.GESTURE_PINCH
@@ -192,7 +191,7 @@ class GestureClassifier:
             
             return (self.current_gesture, is_new_gesture)
         
-    def get_pointer_position(self, landmarks):
+    def pointer_position(self, landmarks):
 
         if not landmarks:
             return None
@@ -200,7 +199,7 @@ class GestureClassifier:
         index_tip = landmarks[config.HandLandmark.INDEX_FINGER_TIP]
         return (index_tip['x'], index_tip['y'])
     
-    def get_gesture_info(self):
+    def gesture_info(self):
         return {
             'current_gesture': self.current_gesture,
             'previous_gesture': self.previous_gesture,
