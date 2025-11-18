@@ -6,10 +6,9 @@ class KeyBoardController:
 
     def __init__(self):
         self.os_name = platform.system()
-
-        if self.os_name == "Darwin":  # macOS
+        if self.os_name == "Darwin":
             self.modifier = "command"
-        else:  # Windows and Linux
+        else:
             self.modifier = "ctrl"
         
         self.last_action_time = 0
@@ -23,14 +22,12 @@ class KeyBoardController:
         return True
     
     def press_key(self, key):
-
         try:
             pyautogui.press(key)
         except Exception as e:
             print(f"Error pressing key {key}: {e}")
 
     def hotkey(self, *keys):
-
         if not self.check_cooldown():
             return
         

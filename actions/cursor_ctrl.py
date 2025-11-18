@@ -4,7 +4,6 @@ import time
 class CursorController:
 
     def __init__(self, screen_width = None, screen_height = None):
-
         if screen_width is None or screen_height is None:
             screen_size = pyautogui.size()
             self.screen_width = screen_size.width
@@ -22,30 +21,25 @@ class CursorController:
         self.click_cooldown = 0.3
 
     def move_to(self, x, y, duration=0.0):
-        
         try:
             x = max(0, min(self.screen_width - 1, int(x)))
             y = max(0, min(self.screen_height - 1, int(y)))
-
             pyautogui.moveTo(x, y, duration=duration)
 
         except Exception as e:
             print(f"Error moving cursor: {e}")
     
     def move_relative(self, dx, dy):
-
         try:
             pyautogui.moveRel(int(dx), int(dy))
         except Exception as e:
             print(f"Error moving cursor relatively: {e}")
 
     def get_position(self):
-        
         pos = pyautogui.position()
         return (pos.x, pos.y)
     
     def click(self, button='left', clicks = 1):
-
         current_time = time.time()
         if current_time - self.last_click_time < self.click_cooldown:
             return
@@ -66,7 +60,6 @@ class CursorController:
         self.click(button = 'left', clicks = 2)
 
     def mouse_down(self, button='left'):
-
         try:
             pyautogui.mouseDown(button=button)
             self.is_dragging = True
@@ -81,7 +74,6 @@ class CursorController:
             print(f"Error releasing mouse button: {e}")
 
     def drag_to(self, x, y, duration = 0.2):
-
         try:
             x = max(0, min(self.screen_width - 1, int(x)))
             y = max(0, min(self.screen_height - 1, int(y)))
@@ -91,7 +83,6 @@ class CursorController:
             print(f"Error dragging mouse to position: {e}")
 
     def scroll(self, amount):
-        
         try:
             pyautogui.scroll(int(amount))
         except Exception as e:
