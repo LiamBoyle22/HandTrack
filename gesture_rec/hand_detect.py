@@ -1,7 +1,7 @@
 import cv2
 import mediapipe
 from mediapipe import solutions as mp_solutions
-import gesture_config as config
+from gesture_rec import gesture_config as config
 
 class HandDetector:
     def __init__(self,

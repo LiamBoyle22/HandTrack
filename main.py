@@ -113,7 +113,7 @@ class HTApp:
         return False
 
     def move_pointer(self, landmarks):
-        index_xy = self.classifier.get_pointer_position(landmarks)
+        index_xy = self.classifier.pointer_position(landmarks)
         if index_xy is None:
             return
 
@@ -162,12 +162,12 @@ class HTApp:
         except AttributeError:
             pass
 
-        try:
-            if self.classifier.detect_poke_three_fingers(landmarks):
-                if self.can_fire("backspace", self._poke_cooldown_s):
-                    self.actions.ping_action("backspace")
-        except AttributeError:
-            pass
+       #try:
+       #      if self.classifier.detect_poke_three_fingers(landmarks):
+       #        if self.can_fire("backspace", self._poke_cooldown_s):
+       #             self.actions.ping_action("backspace")
+       #  except AttributeError:
+       #      pass
 
     def run(self):
         if not self.cap.isOpened():
