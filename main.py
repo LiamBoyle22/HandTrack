@@ -45,7 +45,7 @@ class OneEuroFilter:
         te = 1.0 / max(1e-3, self.freq)
         return 1.0 / (1.0 + tau/te)
 
-    def filter(self, x):
+    def OneEuroF(self, x):
         #Estimate dx
         if self.prev_x is None:
             dx = 0.0
@@ -94,7 +94,7 @@ class HTApp:
         self._disarm_active = False
         self._disarm_t0 = 0.0
 
-        #Debounce one-shot actions
+        #Debounce actions
         self._last_fire = {
             "left_click": 0.0,
             "right_click": 0.0,
@@ -103,7 +103,7 @@ class HTApp:
         }
         self._poke_cooldown_s = 0.45
         self._pinch_cooldown_s = 0.8
-        self._pinch_active = False  #rising-edge detector
+        self._pinch_active = False
 
     def can_fire(self, key: str, min_interval: float) -> bool:
         now = monotonic()
@@ -117,15 +117,12 @@ class HTApp:
         if index_xy is None:
             return
 
-        #Map normalized camera coords to screen coords using your cursor controller
         screen_xy = self.actions.cursor.map_coordinates(
             index_xy[0],
             index_xy[1],
             config.FRAME_WIDTH,
             config.FRAME_HEIGHT,
         )
-
-        #Smoothing
         screen_xy = smooth(self.prev_screen_xy, screen_xy, alpha=(1 - config.SMOOTHING_FACTOR))
         self.prev_screen_xy = screen_xy
 
@@ -143,6 +140,7 @@ class HTApp:
             if self.can_fire("minimize", self._pinch_cooldown_s):
                 self.actions.ping_action("minimize_window")
             self._pinch_active = True
+
         elif not is_pinch:
             self._pinch_active = False
 
@@ -150,16 +148,13 @@ class HTApp:
         if state != ControlState.ACTIVE:
             return
 
-        #Index poke = left click
         try:
             if self.classifier.detect_poke_index(landmarks):
                 if self.can_fire("left_click", self._poke_cooldown_s):
                     self.actions.ping_action("left_click")
         except AttributeError:
-            #Poke helpers not present yet, skip silently
             pass
 
-        #Two-finger poke (index+middle) = right click
         try:
             if self.classifier.detect_poke_two_fingers(landmarks):
                 if self.can_fire("right_click", self._poke_cooldown_s):
@@ -167,7 +162,6 @@ class HTApp:
         except AttributeError:
             pass
 
-        #Three-finger poke (index+middle+ring) = backspace
         try:
             if self.classifier.detect_poke_three_fingers(landmarks):
                 if self.can_fire("backspace", self._poke_cooldown_s):
@@ -185,10 +179,10 @@ class HTApp:
                     print("Cannot read frame from camera")
                     break
 
-                #Mirror the frame 
+                #Mirror img
                 frame = cv2.flip(frame, 1)
 
-                #Detect hand and draw landmarks (your detector API)
+                #Detect hand and landmarks
                 results = self.detector.detect_hands(frame)
                 hand_landmarks = self.detector.get_landmarks(results, frame.shape)
                 frame = self.detector.draw_landmarks(frame, results)
@@ -204,7 +198,7 @@ class HTApp:
                     gesture = self.classifier.classify_gesture(landmarks)
                     norm = normalize_for_state(gesture)
 
-                    #Short streak to make arming more robust
+                    #Short streak to make arming easier
                     if norm == "fist":
                         self._fist_streak += 1
                     else:
@@ -225,7 +219,7 @@ class HTApp:
                     #Poke gestures = click/backspace
                     self.handle_pokes(landmarks, state)
 
-                    #Reverse progress bar when disarming (ACTIVE + hold FIST)
+                    #Reverse progress bar when disarming
                     hold_secs = getattr(state_machine, "hold_seconds", 3.0)
                     if state == ControlState.ACTIVE:
                         if norm == "fist":
@@ -247,7 +241,7 @@ class HTApp:
                     else:
                         hud_progress = 1.0 if state == ControlState.ACTIVE else 0.0
 
-                    #HUD show gesture
+                    #HUD
                     cv2.putText(
                         frame, f"Gesture: {gesture}", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
@@ -264,7 +258,7 @@ class HTApp:
                 #HUD state + progress bar
                 cv2.putText(frame, f"State: {hud_state_text}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2,)
 
-                #Progress bar
+                #Progress bar 
                 cv2.rectangle(frame, (10, 90), (210, 110), (40, 40, 40), -1)
                 cv2.rectangle(frame, (10, 90), (10 + int(200 * max(0.0, min(1.0, hud_progress))), 110), (0, 200, 0), -1,)
 
