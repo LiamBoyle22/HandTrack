@@ -14,6 +14,7 @@ class GestureClassifier:
     GESTURE_FIVE_FINGERS = "FiveFingers"
     GESTURE_FIST = "Fist"
     GESTURE_THUMBS_UP = "ThumbsUp"
+    GESTURE_THUMBS_DOWN = "ThumbsDown"
 
     def __init__ (self):
         self.current_gesture = self.GESTURE_NONE
@@ -26,6 +27,7 @@ class GestureClassifier:
 
     POKE_Z_DELTA = getattr(config, "POKE_Z_DELTA", 0.08) #depth from wrist to finger tip to count as poke
     POKE_REQUIRE_EXTENDED = getattr(config, "POKE_REQUIRE_EXTENDED", True)
+    THUMBS_Y_DELTA = getattr(config, "THUMBS_Y_DELTA", 0.10)
 
     def z(self, pt):
         #Fall back to 0.0 if missing
@@ -61,6 +63,75 @@ class GestureClassifier:
 
         return tip_distance > ip_distance
     
+    def _xy(self, lm):
+        #MediaPipe style object
+        if hasattr(lm, "x") and hasattr(lm, "y"):
+            return lm.x, lm.y
+
+        #Dict style
+        if isinstance(lm, dict):
+            if "x" in lm and "y" in lm:
+                return lm["x"], lm["y"]
+            if 0 in lm and 1 in lm:
+                return lm[0], lm[1]
+            raise KeyError("Landmark dict missing 'x'/'y' or numeric 0/1 keys")
+
+        #Sequence style (tuple/list)
+        return lm[0], lm[1]
+    
+    def _dist(self, landmarks, i, j):
+        xi, yi = self._xy(landmarks[i])
+        xj, yj = self._xy(landmarks[j])
+        return math.hypot(xi - xj, yi - yj)
+
+    def _is_thumb_extended_geom(self, landmarks):
+        WRIST = 0
+        THUMB_MCP = 2
+        THUMB_TIP = 4
+
+        d_tip = self._dist(landmarks, WRIST, THUMB_TIP)
+        d_mcp = self._dist(landmarks, WRIST, THUMB_MCP)
+
+        return d_tip > d_mcp * 1.1
+
+    def _is_finger_extended_geom(self, landmarks, tip_idx, mcp_idx):
+        WRIST = 0
+        d_tip = self._dist(landmarks, WRIST, tip_idx)
+        d_mcp = self._dist(landmarks, WRIST, mcp_idx)
+
+        return d_tip > d_mcp * 1.1
+
+    def thumb_direction(self, landmarks):
+        if not landmarks or len(landmarks) < 6:
+            return "none"
+
+        #Mediapipe indices
+        WRIST = 0
+        THUMB_MCP = 2  
+        THUMB_TIP = 4
+        INDEX_MCP = 5
+
+        wx, wy = self._xy(landmarks[WRIST])
+        tx, ty = self._xy(landmarks[THUMB_TIP])
+        mx, my = self._xy(landmarks[THUMB_MCP])
+        ix, iy = self._xy(landmarks[INDEX_MCP])
+
+        #Rough hand size to make threshold scale with distance to camera
+        hand_size = ( (ix - wx) ** 2 + (iy - wy) ** 2 ) ** 0.5
+        if hand_size < 1e-6:
+            hand_size = 1.0
+
+        dy = ty - my  
+        threshold = 0.25 * hand_size  
+
+        if dy < -threshold:
+            return "up"
+        elif dy > threshold:
+            return "down"
+        else:
+            return "none"
+
+        
     def is_pinch(self, landmarks):
         thumb_tip = landmarks[config.HandLandmark.THUMB_TIP]
         index_tip = landmarks[config.HandLandmark.INDEX_FINGER_TIP]
@@ -77,9 +148,8 @@ class GestureClassifier:
     
     def is_fist(self, landmarks):
         finger_info = self.extended_fingers(landmarks)
-        
-        return finger_info['count'] == 0 or (finger_info['count'] == 1 and finger_info['thumb'])
-    
+        return finger_info['count'] == 0
+
     def extended_fingers(self, landmarks):
         thumb_extended = self.is_thumb_extended(landmarks)
         index_extended = self.is_finger_extended(landmarks, config.HandLandmark.INDEX_FINGER_TIP, config.HandLandmark.INDEX_FINGER_PIP)
@@ -139,37 +209,59 @@ class GestureClassifier:
     def classify_gesture(self, landmarks):
         if not landmarks or len(landmarks) != 21:
             return self.GESTURE_NONE
-        
+
         finger_info = self.extended_fingers(landmarks)
 
-        if self.is_pinch(landmarks):
+        thumb_ext = self._is_thumb_extended_geom(landmarks)
+        index_ext = self._is_finger_extended_geom(landmarks, tip_idx=8,  mcp_idx=5)
+        middle_ext = self._is_finger_extended_geom(landmarks, tip_idx=12, mcp_idx=9)
+        ring_ext = self._is_finger_extended_geom(landmarks, tip_idx=16, mcp_idx=13)
+        pinky_ext = self._is_finger_extended_geom(landmarks, tip_idx=20, mcp_idx=17)
+
+        thumb_dir = self.thumb_direction(landmarks)
+
+        if hasattr(self, "is_pinch") and self.is_pinch(landmarks):
             return self.GESTURE_PINCH
-        
-        if self.is_fist(landmarks):
+
+        if hasattr(self, "is_fist") and self.is_fist(landmarks):
             return self.GESTURE_FIST
-        
-        if finger_info['count'] == 1:
-            if finger_info['index'] and not finger_info['thumb']:
-                return self.GESTURE_POINTER
-            elif finger_info['thumb'] and not finger_info['index']:
+
+        if (
+            thumb_ext
+            and not index_ext
+            and not middle_ext
+            and not ring_ext
+            and not pinky_ext
+        ):
+            if thumb_dir == "up":
                 return self.GESTURE_THUMBS_UP
-            
-        elif finger_info['count'] == 2:
-            if finger_info['index'] and finger_info['middle']:
-                return self.GESTURE_PEACE
-            
-        elif finger_info['count'] == 3:
-            if finger_info['index'] and finger_info['middle'] and finger_info['ring']:
-                return self.GESTURE_THREE_FINGERS
-            
-        elif finger_info['count'] == 4:
-            if not finger_info['thumb']:
-                return self.GESTURE_FOUR_FINGERS
-            
-        elif finger_info['count'] == 5:
+            elif thumb_dir == "down":
+                return self.GESTURE_THUMBS_DOWN
+            else:
+                return self.GESTURE_NONE
+
+        if finger_info.get("count", 0) == 5:
             return self.GESTURE_FIVE_FINGERS
-    
+
+        if finger_info.get("count", 0) == 1:
+            if finger_info.get("index") and not finger_info.get("thumb"):
+                return self.GESTURE_POINTER
+
+        if finger_info.get("count", 0) == 2:
+            if finger_info.get("index") and finger_info.get("middle"):
+                return self.GESTURE_PEACE
+
+        if finger_info.get("count", 0) == 3:
+            if finger_info.get("index") and finger_info.get("middle") and finger_info.get("ring"):
+                return self.GESTURE_THREE_FINGERS
+
+        if finger_info.get("count", 0) == 4:
+            if not finger_info.get("thumb"):
+                return self.GESTURE_FOUR_FINGERS
+
         return self.GESTURE_NONE
+
+    
     def update_gesture(self, landmarks):
         self.frame_count += 1
         gesture = self.classify_gesture(landmarks)

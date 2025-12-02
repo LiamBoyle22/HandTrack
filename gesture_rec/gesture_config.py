@@ -26,6 +26,8 @@ SHOW_LANDMARKS = True
 SHOW_CONNECTIONS = True
 SHOW_BOUNDING_BOX = False
 
+THUMBS_Y_DELTA = 0.10
+
 class HandLandmark:
     WRIST = 0
     THUMB_CMC = 1
