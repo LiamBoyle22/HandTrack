@@ -10,6 +10,8 @@ from gesture_rec.gesture_class import GestureClassifier
 from gesture_rec import gesture_config as config
 from utils.state_machine import GestureStateMachine, ControlState
 
+#testing 
+SCROLL_STEP = 120 #Typical scroll step value
 
 def smooth(prev: Optional[Tuple[int, int]], curr: Tuple[int, int], alpha: float) -> Tuple[int, int]:
     if prev is None:
@@ -79,6 +81,11 @@ class HTApp:
         #Gesture state machine (ThumbsUp / ThumbsDown -> ACTIVE / IDLE)
         self.state_machine = GestureStateMachine()
 
+        self.finger_hold_start_time = None
+        self.finger_hold_click_fired = False
+        self.FINGER_HOLD_TIME = 1.0  # seconds
+
+
     def move_pointer(self, landmarks):
         index_xy = self.classifier.pointer_position(landmarks)
         if index_xy is None:
@@ -130,11 +137,34 @@ class HTApp:
                     state = self.state_machine.update(gesture)
 
                     #Cursor moves only when ACTIVE and hand is five fingers
+                                        # Cursor moves only when ACTIVE and hand is five fingers
                     if (
-                        state == ControlState.ACTIVE and
-                        gesture == GestureClassifier.GESTURE_FIVE_FINGERS
+                        state == ControlState.ACTIVE
+                        and gesture == GestureClassifier.GESTURE_FIVE_FINGERS
                     ):
                         self.move_pointer(landmarks)
+
+                    if state == ControlState.ACTIVE:
+                        if gesture == GestureClassifier.GESTURE_THREE_FINGERS_UP:
+                            self.actions.ping_action("scroll_up", SCROLL_STEP)
+                        elif gesture == GestureClassifier.GESTURE_THREE_FINGERS_DOWN:
+                            self.actions.ping_action("scroll_down", SCROLL_STEP)
+
+                    if state == ControlState.ACTIVE and gesture == GestureClassifier.GESTURE_POINTER:
+                        now = time.time()
+                        if self.finger_hold_start_time is None:
+                            self.finger_hold_start_time = now
+                            self.finger_hold_click_fired = False
+                        else:
+                            if (
+                                not self.finger_hold_click_fired
+                                and (now - self.finger_hold_start_time) >= self.FINGER_HOLD_TIME
+                            ):
+                                self.actions.ping_action("left_click")
+                                self.finger_hold_click_fired = True
+                    else:
+                        self.finger_hold_start_time = None
+                        self.finger_hold_click_fired = False
 
                     #HUD: show current gesture text
                     cv2.putText(

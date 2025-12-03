@@ -9,7 +9,8 @@ class GestureClassifier:
     GESTURE_POINTER = "Pointer"
     GESTURE_PINCH = "Pinch"
     GESTURE_PEACE = "Peace"
-    GESTURE_THREE_FINGERS = "ThreeFingers"
+    GESTURE_THREE_FINGERS_UP = "ThreeFingersUp"
+    GESTURE_THREE_FINGERS_DOWN = "ThreeFingersDown"
     GESTURE_FOUR_FINGERS = "FourFingers"
     GESTURE_FIVE_FINGERS = "FiveFingers"
     GESTURE_FIST = "Fist"
@@ -100,6 +101,40 @@ class GestureClassifier:
         d_mcp = self._dist(landmarks, WRIST, mcp_idx)
 
         return d_tip > d_mcp * 1.1
+    
+    def three_fingers_direction(self, landmarks):
+        if not landmarks or len(landmarks) < 21:
+            return "none"
+
+        finger_pairs = [
+            (12, 9),   #middle tip / MCP
+            (16, 13),  #ring tip / MCP
+            (20, 17),  #pinky tip / MCP
+        ]
+
+        dys = []
+        for tip_idx, mcp_idx in finger_pairs:
+            _, tip_y = self._xy(landmarks[tip_idx])
+            _, mcp_y = self._xy(landmarks[mcp_idx])
+            #y grows downward in image coords
+            dys.append(tip_y - mcp_y)
+
+        avg_dy = sum(dys) / len(dys)
+
+        wx, wy = self._xy(landmarks[0])   #wrist
+        ix, iy = self._xy(landmarks[5])   #index MCP as size ref
+        hand_size = math.hypot(ix - wx, iy - wy)
+        if hand_size < 1e-6:
+            hand_size = 1.0
+
+        threshold = 0.25 * hand_size  #tweak 0.2–0.3 if needed
+
+        if avg_dy < -threshold:
+            return "up"
+        elif avg_dy > threshold:
+            return "down"
+        else:
+            return "none"
 
     def thumb_direction(self, landmarks):
         if not landmarks or len(landmarks) < 6:
@@ -131,7 +166,6 @@ class GestureClassifier:
         else:
             return "none"
 
-        
     def is_pinch(self, landmarks):
         thumb_tip = landmarks[config.HandLandmark.THUMB_TIP]
         index_tip = landmarks[config.HandLandmark.INDEX_FINGER_TIP]
@@ -251,9 +285,17 @@ class GestureClassifier:
             if finger_info.get("index") and finger_info.get("middle"):
                 return self.GESTURE_PEACE
 
-        if finger_info.get("count", 0) == 3:
-            if finger_info.get("index") and finger_info.get("middle") and finger_info.get("ring"):
-                return self.GESTURE_THREE_FINGERS
+        elif (
+            finger_info.get('middle', False)
+            and finger_info.get('ring', False)
+            and finger_info.get('pinky', False)
+        ):
+            direction_3 = self.three_fingers_direction(landmarks)
+            if direction_3 == "up":
+                return self.GESTURE_THREE_FINGERS_UP
+            elif direction_3 == "down":
+                return self.GESTURE_THREE_FINGERS_DOWN
+            return self.GESTURE_NONE
 
         if finger_info.get("count", 0) == 4:
             if not finger_info.get("thumb"):
@@ -261,10 +303,9 @@ class GestureClassifier:
 
         return self.GESTURE_NONE
 
-    
     def update_gesture(self, landmarks):
         self.frame_count += 1
-        gesture = self.classify_gesture(landmarks)
+        gesture = self.classfy_gesture(landmarks)
         frames_since_last = self.frame_count - self.last_gesture_frame
         is_new_gesture = False
 
